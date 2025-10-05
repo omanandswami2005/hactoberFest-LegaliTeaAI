@@ -1,31 +1,64 @@
-// Import puppeteer for headless browser automation
 import puppeteer from "puppeteer";
 
 async function searchUrlGetContent(url) {
-  // Launch headless browser
   const browser = await puppeteer.launch({
-    headless: true, // run without opening a visible browser window
+    headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });
 
-  // Open a new page (tab)
   const page = await browser.newPage();
-
-  // Navigate to the URL and wait for the network to be idle
   await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
 
-  // Extract fully rendered text from the <body>
-  const bodyText = await page.evaluate(() => {
-    const text = document.body.innerText; // 
-    return text //.replace(/\s+/g, "").trim();
+  // Extract content
+  const content = await page.evaluate(() => {
+    // Remove unwanted elements
+    const removeSelectors = [
+      "header",
+      "footer",
+      "nav",
+      "aside",
+      "script",
+      "style",
+      "noscript",
+      "iframe",
+      "form",
+      "[role='banner']",
+      "[role='navigation']",
+      "[role='complementary']",
+      "[role='contentinfo']",
+      "[aria-label*='ads']",
+      "[id*='ad']",
+      "[class*='ad']",
+      "[id*='banner']",
+      "[class*='banner']",
+    ];
+    removeSelectors.forEach(sel =>
+      document.querySelectorAll(sel).forEach(el => el.remove())
+    );
+
+    // Try to find the main content
+    let main =
+      document.querySelector("main") ||
+      document.querySelector("article") ||
+      document.querySelector("[role='main']") ||
+      document.body;
+
+    const title = document.title || document.querySelector("h1")?.innerText || "";
+
+    // Get visible text only
+    const text = main.innerText
+      .replace(/\n\s*\n/g, "\n\n") // remove excessive blank lines
+      .trim();
+
+
+    return { title, text };
   });
 
-  console.log(bodyText);
-
-  // Close browser
   await browser.close();
-
-  return bodyText;
+  console.log(content.text);
+  return content;
 }
 
-module.exports = { searchUrlGetContent };
+// export { searchUrlGetContent };
+
+searchUrlGetContent("https://aws.amazon.com/privacy/");
