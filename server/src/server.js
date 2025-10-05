@@ -14,7 +14,8 @@ export default app;
 if (process.argv[1] === thisFile) {
   app.listen(PORT, () => {
     console.log(`🍵 LegaliTea Server running on http://localhost:${PORT}`);
-    console.log(`🤖 Gemini API configured: ${process.env.GEMINI_API_KEY ? 'Yes' : 'No'}`);
+    console.log(`🤖 Gradient AI API configured: ${process.env.DIGITALOCEAN_ACCESS_TOKEN
+ ? 'Yes' : 'No'}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   });
 

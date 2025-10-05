@@ -7,7 +7,7 @@ class AIService {
         // DigitalOcean AI configuration
         this.apiUrl = "https://inference.do-ai.run/v1/chat/completions";
         this.accessToken = process.env.DIGITALOCEAN_ACCESS_TOKEN;
-        this.model = "openai-gpt-5-mini";
+        this.model = "openai-gpt-4o-mini";
 
         // Check if DigitalOcean AI is available
         this.isAvailable = !!this.accessToken;
