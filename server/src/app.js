@@ -24,7 +24,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api', analysisRoutes);
 
 app.post('/getTextByURL', async (req, res) => {
-  const { url } = req.body;
+  let { url } = req.body;
   url = url.trim();
   if (!url) {
     return res.status(400).json({ content: 'URL is required' });

@@ -55,8 +55,7 @@ async function searchUrlGetContent(url) {
   });
 
   await browser.close();
-  console.log(content.text);
   return content;
 }
 
-module.exports = { searchUrlGetContent };
+export { searchUrlGetContent };
