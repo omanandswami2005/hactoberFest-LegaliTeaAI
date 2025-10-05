@@ -1,30 +1,31 @@
-import fetch from "node-fetch"; // Not needed in Node 18+
-import * as cheerio from "cheerio";
+// Import puppeteer for headless browser automation
+import puppeteer from "puppeteer";
 
-async function scrapePage(url) {
-  try {
-    const response = await fetch(url);
-    const html = await response.text();
+async function searchUrlGetContent(url) {
+  // Launch headless browser
+  const browser = await puppeteer.launch({
+    headless: true, // run without opening a visible browser window
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+  });
 
-    // Parse HTML with Cheerio (like jQuery)
-    const $ = cheerio.load(html);
+  // Open a new page (tab)
+  const page = await browser.newPage();
 
-    // Example: get all links
-    const links = [];
-    $("a").each((_, el) => {
-      links.push($(el).attr("href"));
-    });
+  // Navigate to the URL and wait for the network to be idle
+  await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
 
-    console.log("✅ Page title:", $("title").text());
-    console.log("🔗 Found links:", links.slice(0, 10)); // sample
+  // Extract fully rendered text from the <body>
+  const bodyText = await page.evaluate(() => {
+    const text = document.body.innerText; // 
+    return text //.replace(/\s+/g, "").trim();
+  });
 
-    console.log(response);
+  console.log(bodyText);
 
-    return html; // or return $ if you want to parse later
-  } catch (err) {
-    console.error("❌ Error fetching:", err);
-  }
+  // Close browser
+  await browser.close();
+
+  return bodyText;
 }
 
-// Example usage:
-scrapePage("https://developer.mozilla.org/en-US/docs/Web/JavaScript");
+module.exports = { searchUrlGetContent };
