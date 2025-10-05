@@ -1,212 +1,281 @@
 import {
-  GoogleGenAI,
+    GoogleGenAI,
 } from '@google/genai';
+import Gradient from '@digitalocean/gradient';
 import { getLanguageName } from '../utils/languageUtils.js';
 import { generateFallbackAnalysis } from '../utils/fallbackAnalysis.js';
 import 'dotenv/config';
 
 class AIService {
     constructor() {
-        this.ai = new GoogleGenAI({
+        // Initialize DigitalOcean Gradient AI (Primary)
+        this.gradientClient = new Gradient({
+            accessToken: process.env.DIGITALOCEAN_ACCESS_TOKEN,
+        });
+        this.gradientModel = 'llama3.3-70b-instruct';
+
+        // Initialize Google Gemini AI (Fallback)
+        this.geminiAI = new GoogleGenAI({
             apiKey: process.env.GEMINI_API_KEY || 'AIzaSyAHExmwYmdSR28QOfOBQiQfaQYAmeREpXI',
         });
-        this.model = 'gemini-2.5-flash';
+        this.geminiModel = 'gemini-2.5-flash';
+
+        // Provider availability flags
+        this.gradientAvailable = !!process.env.DIGITALOCEAN_ACCESS_TOKEN;
+        this.geminiAvailable = true;
     }
 
     async analyzeDocument(text, documentType = 'document', language = 'en') {
-        try {
-            const prompt = this.buildAnalysisPrompt(text, language);
-            const contents = [
-                {
-                    role: 'user',
-                    parts: [
-                        {
-                            text: prompt,
-                        },
-                    ],
-                },
-            ];
+        const prompt = this.buildAnalysisPrompt(text, language);
 
-            const response = await this.ai.models.generateContentStream({
-                model: this.model,
-                contents,
-            });
+        // Try DigitalOcean Gradient AI first
+        if (this.gradientAvailable) {
+            try {
+                console.log('Using DigitalOcean Gradient AI for document analysis');
+                const response = await this.gradientClient.chat.completions.create({
+                    messages: [{ role: 'user', content: prompt }],
+                    model: this.gradientModel,
+                });
 
-            let analysisText = '';
-            for await (const chunk of response) {
-                analysisText += chunk.text;
+                const analysisText = response.choices[0]?.message?.content || '';
+                const analysis = this.parseAIResponse(analysisText);
+
+                if (this.validateAnalysis(analysis)) {
+                    return analysis;
+                }
+                throw new Error('Invalid analysis structure from Gradient AI');
+            } catch (error) {
+                console.error('Gradient AI error, falling back to Gemini:', error);
+                this.gradientAvailable = false; // Temporarily disable
             }
-
-            // Clean up the response to extract JSON
-            let jsonText = analysisText.trim();
-
-            // Remove markdown code blocks if present
-            if (jsonText.startsWith('```json')) {
-                jsonText = jsonText.replace(/```json\n?/, '').replace(/\n?```$/, '');
-            } else if (jsonText.startsWith('```')) {
-                jsonText = jsonText.replace(/```\n?/, '').replace(/\n?```$/, '');
-            }
-
-            // Parse the JSON response
-            const analysis = JSON.parse(jsonText);
-
-            // Validate required fields
-            if (!analysis.summary || !analysis.keyInformation || !analysis.riskAssessment || !analysis.actionPlan) {
-                throw new Error('Invalid analysis structure from AI');
-            }
-
-            return analysis;
-        } catch (error) {
-            console.error('Gemini API error:', error);
-            // Fallback to a basic analysis if AI fails
-            return generateFallbackAnalysis(text, documentType);
         }
+
+        // Fallback to Gemini AI
+        if (this.geminiAvailable) {
+            try {
+                console.log('Using Gemini AI for document analysis');
+                const contents = [
+                    {
+                        role: 'user',
+                        parts: [{ text: prompt }],
+                    },
+                ];
+
+                const response = await this.geminiAI.models.generateContentStream({
+                    model: this.geminiModel,
+                    contents,
+                });
+
+                let analysisText = '';
+                for await (const chunk of response) {
+                    analysisText += chunk.text;
+                }
+
+                const analysis = this.parseAIResponse(analysisText);
+
+                if (this.validateAnalysis(analysis)) {
+                    return analysis;
+                }
+                throw new Error('Invalid analysis structure from Gemini AI');
+            } catch (error) {
+                console.error('Gemini AI error:', error);
+            }
+        }
+
+        // Final fallback to static analysis
+        console.log('All AI providers failed, using fallback analysis');
+        return generateFallbackAnalysis(text, documentType);
+    }
+
+    parseAIResponse(responseText) {
+        let jsonText = responseText.trim();
+
+        // Remove markdown code blocks if present
+        if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/```json\n?/, '').replace(/\n?```$/, '');
+        } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/```\n?/, '').replace(/\n?```$/, '');
+        }
+
+        return JSON.parse(jsonText);
+    }
+
+    validateAnalysis(analysis) {
+        return analysis &&
+            analysis.summary &&
+            analysis.keyInformation &&
+            analysis.riskAssessment &&
+            analysis.actionPlan;
     }
 
     async explainTerm(term, context, documentType, language = 'en') {
-        try {
-            const prompt = this.buildTermExplanationPrompt(term, context, documentType, language);
-            const contents = [
-                {
-                    role: 'user',
-                    parts: [
-                        {
-                            text: prompt,
-                        },
-                    ],
-                },
-            ];
+        const prompt = this.buildTermExplanationPrompt(term, context, documentType, language);
 
-            const response = await this.ai.models.generateContentStream({
-                model: this.model,
-                contents,
-            });
+        // Try DigitalOcean Gradient AI first
+        if (this.gradientAvailable) {
+            try {
+                const response = await this.gradientClient.chat.completions.create({
+                    messages: [{ role: 'user', content: prompt }],
+                    model: this.gradientModel,
+                });
 
-            let explanationText = '';
-            for await (const chunk of response) {
-                explanationText += chunk.text;
+                const explanationText = response.choices[0]?.message?.content || '';
+                return this.parseAIResponse(explanationText);
+            } catch (error) {
+                console.error('Gradient AI error for term explanation:', error);
             }
-            explanationText = explanationText.trim();
-
-            // Clean up JSON response
-            if (explanationText.startsWith('```json')) {
-                explanationText = explanationText.replace(/```json\n?/, '').replace(/\n?```$/, '');
-            } else if (explanationText.startsWith('```')) {
-                explanationText = explanationText.replace(/```\n?/, '').replace(/\n?```$/, '');
-            }
-
-            const explanation = JSON.parse(explanationText);
-            return explanation;
-        } catch (error) {
-            console.error('Term explanation error:', error);
-            return {
-                term,
-                definition: "This appears to be a legal term. Please consult a legal professional for accurate definition.",
-                category: "legal",
-                complexity: "intermediate"
-            };
         }
+
+        // Fallback to Gemini AI
+        if (this.geminiAvailable) {
+            try {
+                const contents = [
+                    {
+                        role: 'user',
+                        parts: [{ text: prompt }],
+                    },
+                ];
+
+                const response = await this.geminiAI.models.generateContentStream({
+                    model: this.geminiModel,
+                    contents,
+                });
+
+                let explanationText = '';
+                for await (const chunk of response) {
+                    explanationText += chunk.text;
+                }
+
+                return this.parseAIResponse(explanationText.trim());
+            } catch (error) {
+                console.error('Gemini AI error for term explanation:', error);
+            }
+        }
+
+        // Final fallback
+        return {
+            term,
+            definition: "This appears to be a legal term. Please consult a legal professional for accurate definition.",
+            category: "legal",
+            complexity: "intermediate"
+        };
     }
 
     async generateScenarios(clause, documentType, language = 'en') {
-        try {
-            const prompt = this.buildScenarioPrompt(clause, documentType, language);
-            const contents = [
-                {
-                    role: 'user',
-                    parts: [
-                        {
-                            text: prompt,
-                        },
-                    ],
-                },
-            ];
+        const prompt = this.buildScenarioPrompt(clause, documentType, language);
 
-            const response = await this.ai.models.generateContentStream({
-                model: this.model,
-                contents,
-            });
+        // Try DigitalOcean Gradient AI first
+        if (this.gradientAvailable) {
+            try {
+                const response = await this.gradientClient.chat.completions.create({
+                    messages: [{ role: 'user', content: prompt }],
+                    model: this.gradientModel,
+                });
 
-            let scenarioText = '';
-            for await (const chunk of response) {
-                scenarioText += chunk.text;
+                const scenarioText = response.choices[0]?.message?.content || '';
+                return this.parseAIResponse(scenarioText);
+            } catch (error) {
+                console.error('Gradient AI error for scenario generation:', error);
             }
-            scenarioText = scenarioText.trim();
-
-            // Clean up JSON response
-            if (scenarioText.startsWith('```json')) {
-                scenarioText = scenarioText.replace(/```json\n?/, '').replace(/\n?```$/, '');
-            } else if (scenarioText.startsWith('```')) {
-                scenarioText = scenarioText.replace(/```\n?/, '').replace(/\n?```$/, '');
-            }
-
-            const scenarios = JSON.parse(scenarioText);
-            return scenarios;
-        } catch (error) {
-            console.error('Scenario generation error:', error);
-            return {
-                scenarios: [{
-                    id: "fallback_1",
-                    title: "General Scenario",
-                    situation: "This clause may have legal implications",
-                    consequences: ["Consult a legal professional for specific advice"],
-                    severity: "medium"
-                }]
-            };
         }
+
+        // Fallback to Gemini AI
+        if (this.geminiAvailable) {
+            try {
+                const contents = [
+                    {
+                        role: 'user',
+                        parts: [{ text: prompt }],
+                    },
+                ];
+
+                const response = await this.geminiAI.models.generateContentStream({
+                    model: this.geminiModel,
+                    contents,
+                });
+
+                let scenarioText = '';
+                for await (const chunk of response) {
+                    scenarioText += chunk.text;
+                }
+
+                return this.parseAIResponse(scenarioText.trim());
+            } catch (error) {
+                console.error('Gemini AI error for scenario generation:', error);
+            }
+        }
+
+        // Final fallback
+        return {
+            scenarios: [{
+                id: "fallback_1",
+                title: "General Scenario",
+                situation: "This clause may have legal implications",
+                consequences: ["Consult a legal professional for specific advice"],
+                severity: "medium"
+            }]
+        };
     }
 
     async generateQuiz(documentText, difficulty = 'medium', language = 'en') {
-        try {
-            const prompt = this.buildQuizPrompt(documentText, difficulty, language);
-            const contents = [
-                {
-                    role: 'user',
-                    parts: [
-                        {
-                            text: prompt,
-                        },
-                    ],
-                },
-            ];
+        const prompt = this.buildQuizPrompt(documentText, difficulty, language);
 
-            const response = await this.ai.models.generateContentStream({
-                model: this.model,
-                contents,
-            });
+        // Try DigitalOcean Gradient AI first
+        if (this.gradientAvailable) {
+            try {
+                const response = await this.gradientClient.chat.completions.create({
+                    messages: [{ role: 'user', content: prompt }],
+                    model: this.gradientModel,
+                });
 
-            let quizText = '';
-            for await (const chunk of response) {
-                quizText += chunk.text;
+                const quizText = response.choices[0]?.message?.content || '';
+                return this.parseAIResponse(quizText);
+            } catch (error) {
+                console.error('Gradient AI error for quiz generation:', error);
             }
-            quizText = quizText.trim();
-
-            // Clean up JSON response
-            if (quizText.startsWith('```json')) {
-                quizText = quizText.replace(/```json\n?/, '').replace(/\n?```$/, '');
-            } else if (quizText.startsWith('```')) {
-                quizText = quizText.replace(/```\n?/, '').replace(/\n?```$/, '');
-            }
-
-            const quiz = JSON.parse(quizText);
-            return quiz;
-        } catch (error) {
-            console.error('Quiz generation error:', error);
-            return {
-                quiz: {
-                    title: "Basic Legal Quiz",
-                    questions: [{
-                        id: "q1",
-                        type: "multiple_choice",
-                        question: "What should you do when reviewing a legal document?",
-                        options: ["Sign immediately", "Read carefully", "Ignore it", "Guess the meaning"],
-                        correctAnswer: "Read carefully",
-                        explanation: "Always read legal documents carefully before signing.",
-                        points: 10
-                    }]
-                }
-            };
         }
+
+        // Fallback to Gemini AI
+        if (this.geminiAvailable) {
+            try {
+                const contents = [
+                    {
+                        role: 'user',
+                        parts: [{ text: prompt }],
+                    },
+                ];
+
+                const response = await this.geminiAI.models.generateContentStream({
+                    model: this.geminiModel,
+                    contents,
+                });
+
+                let quizText = '';
+                for await (const chunk of response) {
+                    quizText += chunk.text;
+                }
+
+                return this.parseAIResponse(quizText.trim());
+            } catch (error) {
+                console.error('Gemini AI error for quiz generation:', error);
+            }
+        }
+
+        // Final fallback
+        return {
+            quiz: {
+                title: "Basic Legal Quiz",
+                questions: [{
+                    id: "q1",
+                    type: "multiple_choice",
+                    question: "What should you do when reviewing a legal document?",
+                    options: ["Sign immediately", "Read carefully", "Ignore it", "Guess the meaning"],
+                    correctAnswer: "Read carefully",
+                    explanation: "Always read legal documents carefully before signing.",
+                    points: 10
+                }]
+            }
+        };
     }
 
     buildAnalysisPrompt(text, language) {
