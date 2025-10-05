@@ -19,7 +19,7 @@ export const useProcessingMessage = () => {
       case "extract":
         return "Reading your document...";
       case "analyze":
-        return "Analyzing with Google's Gemini AI...";
+        return "Analyzing with DigitalOcean's Gradient AI...";
       case "complete":
         return "Analysis complete!";
       default:

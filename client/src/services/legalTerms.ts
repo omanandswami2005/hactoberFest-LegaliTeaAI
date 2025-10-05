@@ -134,7 +134,7 @@ class LegalTermsService {
     return [...new Set(detectedTerms)]; // Remove duplicates
   }
 
-  // Get explanation for a legal term using Gemini API
+  // Get explanation for a legal term using DigitalOcean AI
   async explainTerm(
     term: string,
     context: string = "",

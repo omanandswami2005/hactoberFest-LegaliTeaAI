@@ -8,7 +8,7 @@ LegaliTea AI is a revolutionary legal document analysis platform that combines c
 
 ### **1. Advanced Document Analysis Engine**
 
-- **Real Google Gemini Integration**: Direct API integration with structured legal analysis prompts
+- **Real DigitalOcean Gradient AI Integration**: Direct API integration with structured legal analysis prompts
 - **Multi-Language AI Intelligence**: Native AI responses in 12+ languages (not translations)
 - **Smart Document Processing**: PDF, Word, and OCR support with Tesseract.js
 - **Risk Assessment Engine**: Intelligent red flag detection with severity scoring
@@ -220,7 +220,7 @@ interface FeatureCard {
 ### **Implementation**
 
 ```typescript
-const analyzeWithGemini = async (text: string, language: string) => {
+const analyzeWithDigitalOceanAI = async (text: string, language: string) => {
   const prompt = `
     IMPORTANT: Provide analysis in ${getLanguageName(language)} language.
     All explanations, summaries, and recommendations should be in ${getLanguageName(
@@ -365,7 +365,7 @@ const processDocument = async (file: File): Promise<string> => {
 ### **Speed & Efficiency**
 
 - **Analysis Time**: < 30 seconds for most documents
-- **API Response**: < 5 seconds for Gemini API calls
+- **API Response**: < 5 seconds for DigitalOcean AI calls
 - **Animation Performance**: Consistent 60fps on modern devices
 - **Audio Latency**: < 100ms sound feedback response
 

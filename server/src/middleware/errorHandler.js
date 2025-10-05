@@ -18,7 +18,7 @@ const errorHandler = (err, req, res, next) => {
     } else if (err.code === 'LIMIT_FILE_SIZE') {
         error.status = 413;
         error.message = 'File too large';
-    } else if (err.message.includes('Gemini API')) {
+    } else if (err.message.includes('DigitalOcean AI')) {
         error.status = 503;
         error.message = 'AI service temporarily unavailable';
     }

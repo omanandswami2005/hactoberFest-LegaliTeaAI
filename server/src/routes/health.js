@@ -10,7 +10,7 @@ router.get('/', (req, res) => {
         uptime: process.uptime(),
         version: process.env.npm_package_version || '1.0.0',
         environment: process.env.NODE_ENV || 'development',
-        geminiConfigured: !!process.env.GEMINI_API_KEY
+        digitalOceanConfigured: !!process.env.DIGITALOCEAN_ACCESS_TOKEN
     });
 });
 
@@ -25,7 +25,7 @@ router.get('/detailed', (req, res) => {
         version: process.env.npm_package_version || '1.0.0',
         environment: process.env.NODE_ENV || 'development',
         services: {
-            geminiAI: !!process.env.GEMINI_API_KEY,
+            digitalOceanAI: !!process.env.DIGITALOCEAN_ACCESS_TOKEN,
             // supabase: !!(process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY)
         },
         system: {

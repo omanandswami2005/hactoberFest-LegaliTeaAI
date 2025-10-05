@@ -1,90 +1,76 @@
-import {
-    GoogleGenAI,
-} from '@google/genai';
-import Gradient from '@digitalocean/gradient';
 import { getLanguageName } from '../utils/languageUtils.js';
 import { generateFallbackAnalysis } from '../utils/fallbackAnalysis.js';
 import 'dotenv/config';
 
 class AIService {
     constructor() {
-        // Initialize DigitalOcean Gradient AI (Primary)
-        this.gradientClient = new Gradient({
-            accessToken: process.env.DIGITALOCEAN_ACCESS_TOKEN,
-        });
-        this.gradientModel = 'llama3.3-70b-instruct';
+        // DigitalOcean AI configuration
+        this.apiUrl = "https://inference.do-ai.run/v1/chat/completions";
+        this.accessToken = process.env.DIGITALOCEAN_ACCESS_TOKEN;
+        this.model = "openai-gpt-5-mini";
 
-        // Initialize Google Gemini AI (Fallback)
-        this.geminiAI = new GoogleGenAI({
-            apiKey: process.env.GEMINI_API_KEY || 'AIzaSyAHExmwYmdSR28QOfOBQiQfaQYAmeREpXI',
-        });
-        this.geminiModel = 'gemini-2.5-flash';
+        // Check if DigitalOcean AI is available
+        this.isAvailable = !!this.accessToken;
 
-        // Provider availability flags
-        this.gradientAvailable = !!process.env.DIGITALOCEAN_ACCESS_TOKEN;
-        this.geminiAvailable = true;
+        if (!this.isAvailable) {
+            console.warn('DigitalOcean Access Token not found. AI features will use fallback analysis.');
+        } else {
+            console.log('🤖 DigitalOcean AI configured successfully');
+        }
     }
 
     async analyzeDocument(text, documentType = 'document', language = 'en') {
         const prompt = this.buildAnalysisPrompt(text, language);
 
-        // Try DigitalOcean Gradient AI first
-        if (this.gradientAvailable) {
+        // Try DigitalOcean AI
+        if (this.isAvailable) {
             try {
-                console.log('Using DigitalOcean Gradient AI for document analysis');
-                const response = await this.gradientClient.chat.completions.create({
-                    messages: [{ role: 'user', content: prompt }],
-                    model: this.gradientModel,
-                });
-
-                const analysisText = response.choices[0]?.message?.content || '';
-                const analysis = this.parseAIResponse(analysisText);
+                console.log('Using DigitalOcean AI for document analysis');
+                const response = await this.callDigitalOceanAI(prompt);
+                const analysis = this.parseAIResponse(response);
 
                 if (this.validateAnalysis(analysis)) {
                     return analysis;
                 }
-                throw new Error('Invalid analysis structure from Gradient AI');
+                throw new Error('Invalid analysis structure from DigitalOcean AI');
             } catch (error) {
-                console.error('Gradient AI error, falling back to Gemini:', error);
-                this.gradientAvailable = false; // Temporarily disable
+                console.error('DigitalOcean AI error:', error);
             }
         }
 
-        // Fallback to Gemini AI
-        if (this.geminiAvailable) {
-            try {
-                console.log('Using Gemini AI for document analysis');
-                const contents = [
-                    {
-                        role: 'user',
-                        parts: [{ text: prompt }],
-                    },
-                ];
-
-                const response = await this.geminiAI.models.generateContentStream({
-                    model: this.geminiModel,
-                    contents,
-                });
-
-                let analysisText = '';
-                for await (const chunk of response) {
-                    analysisText += chunk.text;
-                }
-
-                const analysis = this.parseAIResponse(analysisText);
-
-                if (this.validateAnalysis(analysis)) {
-                    return analysis;
-                }
-                throw new Error('Invalid analysis structure from Gemini AI');
-            } catch (error) {
-                console.error('Gemini AI error:', error);
-            }
-        }
-
-        // Final fallback to static analysis
-        console.log('All AI providers failed, using fallback analysis');
+        // Fallback to static analysis
+        console.log('Using fallback analysis');
         return generateFallbackAnalysis(text, documentType);
+    }
+
+    async callDigitalOceanAI(prompt) {
+        const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${this.accessToken}`
+        };
+
+        const data = {
+            "model": this.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        };
+
+        const response = await fetch(this.apiUrl, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error(`DigitalOcean AI API error: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return result.choices[0]?.message?.content || '';
     }
 
     parseAIResponse(responseText) {
@@ -111,108 +97,58 @@ class AIService {
     async explainTerm(term, context, documentType, language = 'en') {
         const prompt = this.buildTermExplanationPrompt(term, context, documentType, language);
 
-        // Try DigitalOcean Gradient AI first
-        if (this.gradientAvailable) {
+        // Try DigitalOcean AI
+        if (this.isAvailable) {
             try {
-                const response = await this.gradientClient.chat.completions.create({
-                    messages: [{ role: 'user', content: prompt }],
-                    model: this.gradientModel,
-                });
-
-                const explanationText = response.choices[0]?.message?.content || '';
-                return this.parseAIResponse(explanationText);
+                const response = await this.callDigitalOceanAI(prompt);
+                return this.parseAIResponse(response);
             } catch (error) {
-                console.error('Gradient AI error for term explanation:', error);
+                console.error('DigitalOcean AI error for term explanation:', error);
             }
         }
 
-        // Fallback to Gemini AI
-        if (this.geminiAvailable) {
-            try {
-                const contents = [
-                    {
-                        role: 'user',
-                        parts: [{ text: prompt }],
-                    },
-                ];
-
-                const response = await this.geminiAI.models.generateContentStream({
-                    model: this.geminiModel,
-                    contents,
-                });
-
-                let explanationText = '';
-                for await (const chunk of response) {
-                    explanationText += chunk.text;
-                }
-
-                return this.parseAIResponse(explanationText.trim());
-            } catch (error) {
-                console.error('Gemini AI error for term explanation:', error);
-            }
-        }
-
-        // Final fallback
+        // Fallback response
         return {
             term,
             definition: "This appears to be a legal term. Please consult a legal professional for accurate definition.",
+            contextualDefinition: "Unable to provide context-specific definition without AI service.",
             category: "legal",
-            complexity: "intermediate"
+            complexity: "intermediate",
+            examples: ["Please consult legal resources for examples"],
+            relatedTerms: [],
+            consequences: "Consult a legal professional for specific consequences"
         };
     }
 
     async generateScenarios(clause, documentType, language = 'en') {
         const prompt = this.buildScenarioPrompt(clause, documentType, language);
 
-        // Try DigitalOcean Gradient AI first
-        if (this.gradientAvailable) {
+        // Try DigitalOcean AI
+        if (this.isAvailable) {
             try {
-                const response = await this.gradientClient.chat.completions.create({
-                    messages: [{ role: 'user', content: prompt }],
-                    model: this.gradientModel,
-                });
-
-                const scenarioText = response.choices[0]?.message?.content || '';
-                return this.parseAIResponse(scenarioText);
+                const response = await this.callDigitalOceanAI(prompt);
+                return this.parseAIResponse(response);
             } catch (error) {
-                console.error('Gradient AI error for scenario generation:', error);
+                console.error('DigitalOcean AI error for scenario generation:', error);
             }
         }
 
-        // Fallback to Gemini AI
-        if (this.geminiAvailable) {
-            try {
-                const contents = [
-                    {
-                        role: 'user',
-                        parts: [{ text: prompt }],
-                    },
-                ];
-
-                const response = await this.geminiAI.models.generateContentStream({
-                    model: this.geminiModel,
-                    contents,
-                });
-
-                let scenarioText = '';
-                for await (const chunk of response) {
-                    scenarioText += chunk.text;
-                }
-
-                return this.parseAIResponse(scenarioText.trim());
-            } catch (error) {
-                console.error('Gemini AI error for scenario generation:', error);
-            }
-        }
-
-        // Final fallback
+        // Fallback response
         return {
             scenarios: [{
                 id: "fallback_1",
-                title: "General Scenario",
-                situation: "This clause may have legal implications",
-                consequences: ["Consult a legal professional for specific advice"],
-                severity: "medium"
+                title: "General Legal Scenario",
+                situation: "This clause may have legal implications that require professional review",
+                trigger: "Various circumstances could activate this clause",
+                consequences: [
+                    "Consult a legal professional for specific advice",
+                    "Review the clause with qualified legal counsel",
+                    "Consider potential risks and obligations"
+                ],
+                severity: "medium",
+                likelihood: "medium",
+                prevention: "Seek legal advice before signing any document",
+                proTip: "Always have legal documents reviewed by a qualified attorney"
             }]
         };
     }
@@ -220,60 +156,43 @@ class AIService {
     async generateQuiz(documentText, difficulty = 'medium', language = 'en') {
         const prompt = this.buildQuizPrompt(documentText, difficulty, language);
 
-        // Try DigitalOcean Gradient AI first
-        if (this.gradientAvailable) {
+        // Try DigitalOcean AI
+        if (this.isAvailable) {
             try {
-                const response = await this.gradientClient.chat.completions.create({
-                    messages: [{ role: 'user', content: prompt }],
-                    model: this.gradientModel,
-                });
-
-                const quizText = response.choices[0]?.message?.content || '';
-                return this.parseAIResponse(quizText);
+                const response = await this.callDigitalOceanAI(prompt);
+                return this.parseAIResponse(response);
             } catch (error) {
-                console.error('Gradient AI error for quiz generation:', error);
+                console.error('DigitalOcean AI error for quiz generation:', error);
             }
         }
 
-        // Fallback to Gemini AI
-        if (this.geminiAvailable) {
-            try {
-                const contents = [
-                    {
-                        role: 'user',
-                        parts: [{ text: prompt }],
-                    },
-                ];
-
-                const response = await this.geminiAI.models.generateContentStream({
-                    model: this.geminiModel,
-                    contents,
-                });
-
-                let quizText = '';
-                for await (const chunk of response) {
-                    quizText += chunk.text;
-                }
-
-                return this.parseAIResponse(quizText.trim());
-            } catch (error) {
-                console.error('Gemini AI error for quiz generation:', error);
-            }
-        }
-
-        // Final fallback
+        // Fallback quiz
         return {
             quiz: {
-                title: "Basic Legal Quiz",
-                questions: [{
-                    id: "q1",
-                    type: "multiple_choice",
-                    question: "What should you do when reviewing a legal document?",
-                    options: ["Sign immediately", "Read carefully", "Ignore it", "Guess the meaning"],
-                    correctAnswer: "Read carefully",
-                    explanation: "Always read legal documents carefully before signing.",
-                    points: 10
-                }]
+                title: "Basic Legal Document Quiz",
+                difficulty: difficulty,
+                questions: [
+                    {
+                        id: "q1",
+                        type: "multiple_choice",
+                        question: "What should you do when reviewing a legal document?",
+                        options: ["Sign immediately", "Read carefully and seek advice", "Ignore complex terms", "Guess the meaning"],
+                        correctAnswer: "Read carefully and seek advice",
+                        explanation: "Always read legal documents carefully and consult with legal professionals when needed.",
+                        points: 10,
+                        category: "general"
+                    },
+                    {
+                        id: "q2",
+                        type: "true_false",
+                        question: "It's safe to sign a contract without understanding all the terms.",
+                        options: ["True", "False"],
+                        correctAnswer: "False",
+                        explanation: "Never sign a contract without fully understanding all terms and their implications.",
+                        points: 10,
+                        category: "general"
+                    }
+                ]
             }
         };
     }

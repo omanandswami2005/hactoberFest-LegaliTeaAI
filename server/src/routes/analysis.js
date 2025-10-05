@@ -9,7 +9,7 @@ router.post('/analyze', validateAnalysisRequest, async (req, res, next) => {
     try {
         const { text, documentType, language = 'en' } = req.body;
 
-        console.log(`Analyzing document with Gemini AI in ${language}...`);
+        console.log(`Analyzing document with DigitalOcean AI in ${language}...`);
         const analysis = await aiService.analyzeDocument(text, documentType, language);
 
         res.json(analysis);

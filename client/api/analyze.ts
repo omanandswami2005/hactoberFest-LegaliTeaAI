@@ -46,7 +46,7 @@ interface AnalysisResult {
   }>;
 }
 
-// Placeholder analysis function - will be replaced with actual Gemini API call
+// Placeholder analysis function - will be replaced with actual DigitalOcean AI call
 function generatePlaceholderAnalysis(text: string): AnalysisResult {
   return {
     summary: {
@@ -161,7 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // For now, return placeholder analysis
-    // TODO: Replace with actual Gemini API integration
+    // TODO: Replace with actual DigitalOcean AI integration
     const analysis = generatePlaceholderAnalysis(text);
 
     res.status(200).json(analysis);

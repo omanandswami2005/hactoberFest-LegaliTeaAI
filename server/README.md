@@ -10,7 +10,7 @@ server/
 │   ├── analysis.js       # AI analysis endpoints
 │   └── health.js         # Health check endpoints
 ├── services/
-│   └── aiService.js      # Google Gemini AI integration
+│   └── aiService.js      # DigitalOcean Gradient AI integration
 ├── middleware/
 │   ├── errorHandler.js   # Global error handling
 │   ├── requestLogger.js  # Request logging
@@ -52,12 +52,84 @@ server/
 - **Memory Monitoring**: Health endpoint shows memory usage
 - **CORS Configuration**: Proper cross-origin request handling
 
-### **5. AI Service Abstraction**
+### **5. Dual AI Provider System**
 
+- **Primary Provider**: DigitalOcean Gradient AI with Llama 3.3-70B model
+- **Fallback Provider**: Static analysis for reliability
+- **Intelligent Routing**: Automatic provider switching with error handling
 - **Service Layer**: Clean separation between routes and AI logic
-- **Fallback Handling**: Graceful degradation when AI fails
-- **Multiple AI Methods**: Support for different AI operations
+- **Graceful Degradation**: Multiple fallback levels including static analysis
+- **Multiple AI Methods**: Support for different AI operations across providers
 - **Language Support**: Multi-language prompt generation
+
+## 🤖 **AI Provider Architecture**
+
+### **Dual Provider System**
+
+The LegaliTea server implements a sophisticated dual AI provider system for maximum reliability and performance:
+
+```
+Client Request → AI Service Router → Provider Selection → Response Normalization → Client Response
+                                   ↓
+                    ┌─────────────────────────────────┐
+                    │  Primary: DigitalOcean Gradient │
+                    │  Model: Llama 3.3-70B          │
+                    │  Timeout: 30s                   │
+                    │  Max Retries: 3                 │
+                    └─────────────────────────────────┘
+                                   ↓ (on failure)
+                    ┌─────────────────────────────────┐
+                    │  Fallback: Static Analysis      │
+                    │  Pre-built responses            │
+                    │  Timeout: 25s                   │
+                    │  Max Retries: 2                 │
+                    └─────────────────────────────────┘
+                                   ↓ (on failure)
+                    ┌─────────────────────────────────┐
+                    │  Static Fallback Analysis       │
+                    │  Pre-built responses            │
+                    │  Always available               │
+                    └─────────────────────────────────┘
+```
+
+### **Provider Features**
+
+#### **DigitalOcean Gradient AI (Primary)**
+
+- **Model**: Llama 3.3-70B Instruct
+- **Strengths**: Advanced reasoning, legal domain knowledge, cost-effective
+- **Use Cases**: Complex legal analysis, detailed explanations, scenario generation
+- **Configuration**: Requires `DIGITALOCEAN_ACCESS_TOKEN`
+
+#### **Static Analysis (Fallback)**
+
+- **Type**: Pre-built analysis templates
+- **Strengths**: Always available, no API dependencies, instant response
+- **Use Cases**: Fallback when AI service is unavailable
+- **Configuration**: No configuration required
+
+### **Intelligent Routing Logic**
+
+```javascript
+// Provider selection algorithm
+async function selectProvider(requestType) {
+  if (gradientAvailable && !isRateLimited("gradient")) {
+    return "gradient";
+  } else {
+    return "static";
+  } else {
+    return "static";
+  }
+}
+```
+
+### **Error Handling & Fallbacks**
+
+- **Network Errors**: Automatic retry with exponential backoff
+- **Rate Limiting**: Switch to alternative provider
+- **Invalid Responses**: Response validation and re-routing
+- **Timeouts**: Cancel request and fallback to next provider
+- **Authentication Errors**: Log error and switch providers immediately
 
 ## 🔧 **API Endpoints**
 
@@ -164,7 +236,8 @@ NODE_ENV=production npm run server
 
 ```env
 # Required
-VITE_GEMINI_API_KEY=your_api_key
+DIGITALOCEAN_ACCESS_TOKEN=your_digitalocean_access_token
+# GEMINI_API_KEY=your_gemini_api_key  # No longer needed
 
 # Optional
 NODE_ENV=development
@@ -183,11 +256,12 @@ VITE_SUPABASE_ANON_KEY=your_supabase_key
 
 ### **Adding New AI Features**
 
-1. Add method to `aiService.js`
-2. Create prompt builder method
-3. Add route handler
-4. Add validation middleware
-5. Test with fallback scenarios
+1. Add method to `aiService.js` with dual provider support
+2. Create prompt builder method compatible with both AI providers
+3. Implement provider routing logic (Gradient → Static fallback)
+4. Add route handler with error handling
+5. Add validation middleware
+6. Test with all fallback scenarios (provider failures, timeouts, invalid responses)
 
 ## 📈 **Monitoring & Logging**
 
@@ -201,7 +275,9 @@ VITE_SUPABASE_ANON_KEY=your_supabase_key
 
 - **Basic**: Status, uptime, version
 - **Detailed**: Memory usage, system info, service status
-- **Services**: Gemini AI and Supabase connection status
+- **AI Providers**: DigitalOcean Gradient AI connection status
+- **Provider Performance**: Response times and success rates for each AI provider
+- **Fallback Tracking**: Monitor provider switching frequency and reasons
 
 ### **Error Tracking**
 
@@ -223,6 +299,28 @@ curl -X POST http://localhost:3001/api/analyze \
   -d '{"text":"Sample legal text","language":"en"}'
 ```
 
+### **AI Provider Testing**
+
+```bash
+# Test with DigitalOcean Gradient AI (primary)
+curl -X POST http://localhost:3001/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Sample contract text","language":"en"}'
+
+# Test provider fallback (remove DIGITALOCEAN_ACCESS_TOKEN temporarily)
+unset DIGITALOCEAN_ACCESS_TOKEN
+curl -X POST http://localhost:3001/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Sample contract text","language":"en"}'
+
+# Test all providers failing (remove both API keys)
+unset DIGITALOCEAN_ACCESS_TOKEN
+# unset GEMINI_API_KEY  # No longer needed
+curl -X POST http://localhost:3001/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Sample contract text","language":"en"}'
+```
+
 ### **Error Testing**
 
 ```bash
@@ -233,6 +331,11 @@ for i in {1..105}; do curl http://localhost:3001/api/health; done
 curl -X POST http://localhost:3001/api/analyze \
   -H "Content-Type: application/json" \
   -d '{}'
+
+# Provider-specific errors
+curl -X POST http://localhost:3001/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"text":"","language":"invalid"}'
 ```
 
 ## 🚀 **Production Deployment**
@@ -244,7 +347,7 @@ curl -X POST http://localhost:3001/api/analyze \
 export NODE_ENV=production
 
 # Set API keys
-export VITE_GEMINI_API_KEY=your_production_key
+# export VITE_GEMINI_API_KEY=your_production_key  # No longer needed
 
 # Start server
 npm run server
@@ -252,12 +355,14 @@ npm run server
 
 ### **Production Considerations**
 
-- **Rate Limiting**: Use Redis for distributed rate limiting
-- **Logging**: Use structured logging (Winston, Bunyan)
-- **Monitoring**: Add APM tools (New Relic, DataDog)
-- **Load Balancing**: Use nginx or cloud load balancers
+- **AI Provider Management**: Monitor usage quotas and costs for both providers
+- **Rate Limiting**: Use Redis for distributed rate limiting across providers
+- **Logging**: Use structured logging (Winston, Bunyan) with provider-specific metrics
+- **Monitoring**: Add APM tools (New Relic, DataDog) with AI provider performance tracking
+- **Load Balancing**: Use nginx or cloud load balancers with health checks
 - **Database**: Implement proper Supabase integration
-- **Caching**: Add Redis for response caching
+- **Caching**: Add Redis for response caching and provider status caching
+- **Failover Strategy**: Implement circuit breakers for AI provider failures
 
 ## 🔮 **Future Enhancements**
 

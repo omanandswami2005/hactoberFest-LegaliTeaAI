@@ -10,7 +10,8 @@ export class AIAnalyzer {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+    this.baseUrl =
+      baseUrl || import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
   }
 
   async analyzeDocument(
@@ -187,7 +188,7 @@ export class AIAnalyzer {
   }
 }
 
-// Structured prompts for Gemini API (for future implementation)
+// Structured prompts for DigitalOcean AI (for future implementation)
 export const ANALYSIS_PROMPTS = {
   system: `You are a legal document analysis assistant. Analyze legal documents and provide clear, actionable insights for non-lawyers. Always respond in JSON format with the specified structure.`,
 

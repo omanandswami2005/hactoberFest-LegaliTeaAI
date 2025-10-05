@@ -1,7 +1,7 @@
 {
   "name": "legalitea-server",
   "version": "1.0.0",
-  "description": "Legal document analysis server with AI-powered features using Google Gemini",
+  "description": "Legal document analysis server with AI-powered features using DigitalOcean Gradient AI",
   "license": "ISC",
   "author": "omiii",
   "type": "module",
@@ -17,12 +17,13 @@
     "legal",
     "ai",
     "analysis",
-    "gemini",
+    "digitalocean",
+    "gradient",
+    "llama",
     "express",
     "document-analysis"
   ],
   "dependencies": {
-    "@google/genai": "^0.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
