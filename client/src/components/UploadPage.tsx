@@ -7,6 +7,8 @@ import {
   File,
   FileImage,
   Coffee,
+  Globe,
+  Link,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +28,7 @@ import { useDocumentProcessor } from "@/hooks/useDocumentProcessor";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { sampleDocuments } from "@/services/documentProcessor";
 import { AnimatedLanguageText } from "./LanguageSelector";
+import { UrlExtractor } from "@/services/urlExtractor";
 
 // Define TypeScript interfaces for type safety
 interface AppStore {
@@ -48,14 +51,19 @@ interface Analysis {
 export const UploadPage: React.FC = () => {
   const [dragActive, setDragActive] = useState(false);
   const [textInput, setTextInput] = useState("");
+  const [urlInput, setUrlInput] = useState("");
   const [activeTab, setActiveTab] = useState("upload");
+  const [isUrlLoading, setIsUrlLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const MAX_CHAR_LIMIT = 50000;
+  const MAX_CHAR_LIMIT = 200000;
 
-  const { uploadedFile, error, setError, clearError } = useAppStore() as AppStore;
-  const { processFile, processText, validateFile } = useDocumentProcessor() as DocumentProcessor;
+  const { uploadedFile, error, setError, clearError } =
+    useAppStore() as AppStore;
+  const { processFile, processText, validateFile } =
+    useDocumentProcessor() as DocumentProcessor;
   const { analyzeDocument } = useAnalysis() as Analysis;
   const { playUpload, playSuccess, playError } = useAudioFeedback();
+  const urlExtractor = new UrlExtractor();
 
   // Handle drag events
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -71,38 +79,55 @@ export const UploadPage: React.FC = () => {
   // Process uploaded file
   const handleFileUpload = useCallback(
     async (file: File) => {
-       clearError();
-       console.log("Starting file upload processing:", file.name, file.type, file.size);
+      clearError();
+      console.log(
+        "Starting file upload processing:",
+        file.name,
+        file.type,
+        file.size
+      );
 
-       // Validate file first
-       const validation = validateFile(file);
-       if (!validation.valid) {
-         setError(validation.error || "Invalid file.");
-         playError();
-         return;
-       }
+      // Validate file first
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        setError(validation.error || "Invalid file.");
+        playError();
+        return;
+      }
 
-       try {
-         playUpload();
-         console.log("Calling processFile...");
-         const extractedText = await processFile(file);
-         console.log("processFile completed, extracted text length:", extractedText?.length);
-         if (extractedText) {
-           playSuccess();
-           console.log("Text extracted successfully, showing preview...");
-           // Preview will be shown automatically by the app state management
-           // User can review and edit before proceeding to analysis
-         } else {
-           setError("No text could be extracted from the file.");
-           playError();
-         }
-       } catch (error) {
-         console.error("File processing error:", error);
-         setError("Failed to process file. Please try again.");
-         playError();
-       }
-     },
-    [clearError, setError, validateFile, processFile, analyzeDocument, playUpload, playSuccess, playError]
+      try {
+        playUpload();
+        console.log("Calling processFile...");
+        const extractedText = await processFile(file);
+        console.log(
+          "processFile completed, extracted text length:",
+          extractedText?.length
+        );
+        if (extractedText) {
+          playSuccess();
+          console.log("Text extracted successfully, showing preview...");
+          // Preview will be shown automatically by the app state management
+          // User can review and edit before proceeding to analysis
+        } else {
+          setError("No text could be extracted from the file.");
+          playError();
+        }
+      } catch (error) {
+        console.error("File processing error:", error);
+        setError("Failed to process file. Please try again.");
+        playError();
+      }
+    },
+    [
+      clearError,
+      setError,
+      validateFile,
+      processFile,
+      analyzeDocument,
+      playUpload,
+      playSuccess,
+      playError,
+    ]
   );
 
   // Handle file drop
@@ -137,7 +162,9 @@ export const UploadPage: React.FC = () => {
     clearError();
 
     if (textInput.length > MAX_CHAR_LIMIT) {
-      setError(`Text exceeds ${MAX_CHAR_LIMIT.toLocaleString()} character limit.`);
+      setError(
+        `Text exceeds ${MAX_CHAR_LIMIT.toLocaleString()} character limit.`
+      );
       playError();
       return;
     }
@@ -157,18 +184,76 @@ export const UploadPage: React.FC = () => {
       setError("Failed to process text. Please try again.");
       playError();
     }
-  }, [textInput, clearError, setError, processText, analyzeDocument, playUpload, playSuccess, playError]);
+  }, [
+    textInput,
+    clearError,
+    setError,
+    processText,
+    analyzeDocument,
+    playUpload,
+    playSuccess,
+    playError,
+  ]);
+
+  // Handle URL input
+  const handleUrlSubmit = useCallback(async () => {
+    clearError();
+
+    if (!UrlExtractor.isValidUrl(urlInput)) {
+      setError("Please enter a valid URL (e.g., https://example.com)");
+      playError();
+      return;
+    }
+
+    setIsUrlLoading(true);
+
+    try {
+      playUpload();
+      const result = await urlExtractor.extractWithRetry(urlInput);
+
+      if (!result.text || result.text.trim().length < 50) {
+        setError("The webpage doesn't contain enough readable text content.");
+        playError();
+        return;
+      }
+
+      if (processText(result.text)) {
+        playSuccess();
+        // Automatically start analysis with the extracted text
+        analyzeDocument(result.text, "webpage");
+      } else {
+        setError("Failed to process extracted text. Please try again.");
+        playError();
+      }
+    } catch (error) {
+      console.error("URL extraction error:", error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to extract content from URL. Please try again."
+      );
+      playError();
+    } finally {
+      setIsUrlLoading(false);
+    }
+  }, [
+    urlInput,
+    clearError,
+    setError,
+    processText,
+    analyzeDocument,
+    playUpload,
+    playSuccess,
+    playError,
+    urlExtractor,
+  ]);
 
   // Load sample document
-  const loadSample = useCallback(
-    (sampleKey: keyof typeof sampleDocuments) => {
-      const sampleText = sampleDocuments[sampleKey];
-      setTextInput(sampleText);
-      setActiveTab("text");
-    },
-    []
-  );
-
+  const loadSample = useCallback((sampleKey: keyof typeof sampleDocuments) => {
+    const sampleText = sampleDocuments[sampleKey];
+    setTextInput(sampleText);
+    setActiveTab("text");
+  }, []);
 
   // Format file size
   const formatFileSize = useCallback((bytes: number): string => {
@@ -217,14 +302,16 @@ export const UploadPage: React.FC = () => {
         <CardHeader>
           <CardTitle>Choose how to add your document</CardTitle>
           <CardDescription>
-            We support PDF and Word documents, or you can paste text directly
+            We support PDF and Word documents, paste text directly, or extract
+            content from webpages
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="upload">Upload File</TabsTrigger>
               <TabsTrigger value="text">Paste Text</TabsTrigger>
+              <TabsTrigger value="url">Enter URL</TabsTrigger>
             </TabsList>
 
             {/* File Upload Tab */}
@@ -313,21 +400,30 @@ export const UploadPage: React.FC = () => {
 
               {/* Document Type Examples */}
               <StaggeredCards className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <AnimatedCard animation="hover-lift" className="text-center p-4">
+                <AnimatedCard
+                  animation="hover-lift"
+                  className="text-center p-4"
+                >
                   <FileText className="h-8 w-8 text-blue-500 mx-auto mb-2" />
                   <h4 className="font-medium">Leases & Rentals</h4>
                   <p className="text-sm text-muted-foreground">
                     Apartment leases, rental agreements
                   </p>
                 </AnimatedCard>
-                <AnimatedCard animation="hover-lift" className="text-center p-4">
+                <AnimatedCard
+                  animation="hover-lift"
+                  className="text-center p-4"
+                >
                   <FileImage className="h-8 w-8 text-green-500 mx-auto mb-2" />
                   <h4 className="font-medium">Contracts & NDAs</h4>
                   <p className="text-sm text-muted-foreground">
                     Service agreements, NDAs
                   </p>
                 </AnimatedCard>
-                <AnimatedCard animation="hover-lift" className="text-center p-4">
+                <AnimatedCard
+                  animation="hover-lift"
+                  className="text-center p-4"
+                >
                   <File className="h-8 w-8 text-purple-500 mx-auto mb-2" />
                   <h4 className="font-medium">Terms of Service</h4>
                   <p className="text-sm text-muted-foreground">
@@ -349,11 +445,15 @@ export const UploadPage: React.FC = () => {
                 />
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
-                    {textInput.length.toLocaleString()} / {MAX_CHAR_LIMIT.toLocaleString()} characters
+                    {textInput.length.toLocaleString()} /{" "}
+                    {MAX_CHAR_LIMIT.toLocaleString()} characters
                   </div>
                   <AnimatedButton
                     onClick={handleTextSubmit}
-                    disabled={textInput.trim().length < 50 || textInput.length > MAX_CHAR_LIMIT}
+                    disabled={
+                      textInput.trim().length < 50 ||
+                      textInput.length > MAX_CHAR_LIMIT
+                    }
                   >
                     Analyze Text
                   </AnimatedButton>
@@ -391,6 +491,91 @@ export const UploadPage: React.FC = () => {
                     <FileImage className="h-4 w-4 mr-2" />
                     Sample Contract
                   </AnimatedButton>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* URL Input Tab */}
+            <TabsContent value="url" className="mt-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="url-input" className="text-sm font-medium">
+                    Enter webpage URL
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <input
+                        id="url-input"
+                        type="url"
+                        placeholder="https://example.com/legal-document"
+                        value={urlInput}
+                        onChange={(e) => setUrlInput(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        disabled={isUrlLoading}
+                      />
+                    </div>
+                    <AnimatedButton
+                      onClick={handleUrlSubmit}
+                      disabled={
+                        !urlInput.trim() ||
+                        !UrlExtractor.isValidUrl(urlInput) ||
+                        isUrlLoading
+                      }
+                      className="px-6"
+                    >
+                      {isUrlLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                          Extracting...
+                        </>
+                      ) : (
+                        <>
+                          <Link className="h-4 w-4 mr-2" />
+                          Extract Text
+                        </>
+                      )}
+                    </AnimatedButton>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    We'll extract the main text content from the webpage,
+                    removing navigation, ads, and other non-content elements.
+                  </p>
+                </div>
+
+                {/* URL Examples */}
+                <div className="mt-6">
+                  <h4 className="font-medium mb-3">Try extracting from:</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <AnimatedButton
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setUrlInput(
+                          "https://policies.google.com/privacy?hl=en-US"
+                        )
+                      }
+                      className="justify-start text-left"
+                      disabled={isUrlLoading}
+                    >
+                      <Globe className="h-4 w-4 mr-2" />
+                      Privacy Policy (Google)
+                    </AnimatedButton>
+                    <AnimatedButton
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setUrlInput(
+                          "https://en.wikipedia.org/wiki/Terms_of_service"
+                        )
+                      }
+                      className="justify-start text-left"
+                      disabled={isUrlLoading}
+                    >
+                      <Globe className="h-4 w-4 mr-2" />
+                      Terms of Service (Wikipedia)
+                    </AnimatedButton>
+                  </div>
                 </div>
               </div>
             </TabsContent>

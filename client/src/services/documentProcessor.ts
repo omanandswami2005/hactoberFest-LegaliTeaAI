@@ -148,13 +148,13 @@ export class DocumentProcessor {
     text?: string;
     error?: string;
   } {
-    const maxLength = 50000;
+    const maxLength = 200000; // Increased to handle longer legal documents
     const minLength = 50;
 
     if (text.length > maxLength) {
       return {
         valid: false,
-        error: `Text too long. Maximum ${maxLength.toLocaleString()} characters allowed.`,
+        error: `Text too long. Maximum ${maxLength.toLocaleString()} characters allowed. Please try a shorter document or extract specific sections.`,
       };
     }
 

@@ -22,6 +22,7 @@
     "document-analysis"
   ],
   "dependencies": {
+    "@digitalocean/gradient": "^0.1.0-alpha.1",
     "@google/genai": "^0.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
