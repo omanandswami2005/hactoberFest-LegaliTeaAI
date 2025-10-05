@@ -59,6 +59,4 @@ async function searchUrlGetContent(url) {
   return content;
 }
 
-// export { searchUrlGetContent };
-
-searchUrlGetContent("https://aws.amazon.com/privacy/");
+module.exports = { searchUrlGetContent };
