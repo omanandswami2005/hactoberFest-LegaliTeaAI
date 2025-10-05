@@ -21,8 +21,10 @@ interface TermExplanation {
 class LegalTermsService {
   private termCache: Map<string, TermExplanation> = new Map();
   private commonLegalTerms: Set<string> = new Set();
+  private baseUrl: string;
 
-  constructor() {
+  constructor(baseUrl?: string) {
+    this.baseUrl = baseUrl || import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
     this.initializeCommonTerms();
   }
 
@@ -148,7 +150,7 @@ class LegalTermsService {
     }
 
     try {
-      const response = await fetch("http://localhost:3001/api/explain-term", {
+      const response = await fetch(`${this.baseUrl}/api/explain-term`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
